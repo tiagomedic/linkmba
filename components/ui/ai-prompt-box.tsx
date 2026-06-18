@@ -1,265 +1,153 @@
 'use client'
 
-import React from 'react'
-import * as TooltipPrimitive from '@radix-ui/react-tooltip'
-import { ArrowUp, Square, BookOpen, Layers, Lightbulb } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useRef, useCallback, useEffect, useState } from 'react'
+import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import { ArrowUp, Square } from 'lucide-react'
 
-const cn = (...classes: (string | undefined | null | false)[]) =>
-  classes.filter(Boolean).join(' ')
+// ── Auto-resize hook ──────────────────────────────────────────────────────────
 
-// ── Tooltip ──────────────────────────────────────────────────────────────────
-const TooltipProvider = TooltipPrimitive.Provider
-const Tooltip = TooltipPrimitive.Root
-const TooltipTrigger = TooltipPrimitive.Trigger
-const TooltipContent = React.forwardRef<
-  React.ElementRef<typeof TooltipPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>
->(({ className, sideOffset = 4, ...props }, ref) => (
-  <TooltipPrimitive.Content
-    ref={ref}
-    sideOffset={sideOffset}
-    className={cn(
-      'z-50 overflow-hidden rounded-lg border border-gray-700 bg-gray-900 px-3 py-1.5 text-xs text-white shadow-lg',
-      'animate-in fade-in-0 zoom-in-95',
-      className
-    )}
-    {...props}
-  />
-))
-TooltipContent.displayName = 'TooltipContent'
-
-// ── Divider ───────────────────────────────────────────────────────────────────
-const Divider = () => (
-  <div className="h-5 w-px bg-gray-700/60 mx-0.5 flex-shrink-0" />
-)
-
-// ── Main Component ────────────────────────────────────────────────────────────
-interface MBAPromptBoxProps {
-  onSend: (message: string) => void
-  disabled?: boolean
-  placeholder?: string
+interface AutoResizeProps {
+  minHeight: number
+  maxHeight?: number
 }
 
-export const MBAPromptBox = React.forwardRef<HTMLDivElement, MBAPromptBoxProps>(
-  ({ onSend, disabled = false, placeholder = 'Pergunte sobre o material do MBA...' }, ref) => {
-    const [input, setInput] = React.useState('')
-    const [activeMode, setActiveMode] = React.useState<'none' | 'modulos' | 'resumo'>('none')
-    const textareaRef = React.useRef<HTMLTextAreaElement>(null)
-    const hasContent = input.trim().length > 0
+function useAutoResizeTextarea({ minHeight, maxHeight }: AutoResizeProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-    // Auto-resize textarea
-    React.useEffect(() => {
-      const el = textareaRef.current
-      if (!el) return
-      el.style.height = 'auto'
-      el.style.height = `${Math.min(el.scrollHeight, 200)}px`
-    }, [input])
-
-    const handleSubmit = () => {
-      if (!hasContent || disabled) return
-      const prefix = activeMode === 'modulos' ? '[Módulos] ' : activeMode === 'resumo' ? '[Resumo] ' : ''
-      onSend(prefix + input.trim())
-      setInput('')
-      if (textareaRef.current) textareaRef.current.style.height = 'auto'
-    }
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault()
-        handleSubmit()
+  const adjustHeight = useCallback(
+    (reset?: boolean) => {
+      const textarea = textareaRef.current
+      if (!textarea) return
+      if (reset) {
+        textarea.style.height = `${minHeight}px`
+        return
       }
+      textarea.style.height = `${minHeight}px`
+      const newHeight = Math.max(
+        minHeight,
+        Math.min(textarea.scrollHeight, maxHeight ?? Infinity)
+      )
+      textarea.style.height = `${newHeight}px`
+    },
+    [minHeight, maxHeight]
+  )
+
+  useEffect(() => {
+    if (textareaRef.current) textareaRef.current.style.height = `${minHeight}px`
+  }, [minHeight])
+
+  return { textareaRef, adjustHeight }
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
+
+export interface MBAPromptBoxProps {
+  /** Called when the user submits a message. */
+  onSend: (content?: string) => void
+  /** Called when the user clicks the Stop button during streaming. */
+  onStop?: () => void
+  /** Disables the send button (but shows the stop button when streaming). */
+  disabled?: boolean
+}
+
+// ── MBAPromptBox ──────────────────────────────────────────────────────────────
+//
+// Compact prompt box used in the chat-state view (after messages exist).
+// Renders a self-contained textarea + send/stop button row.
+// When `disabled` is true and `onStop` is provided, the send button is replaced
+// by a Stop button so the user can abort the in-flight streaming response.
+
+export function MBAPromptBox({ onSend, onStop, disabled }: MBAPromptBoxProps) {
+  const [value, setValue] = useState('')
+  const { textareaRef, adjustHeight } = useAutoResizeTextarea({
+    minHeight: 52,
+    maxHeight: 160,
+  })
+
+  const hasContent = value.trim().length > 0
+  const isStreaming = !!disabled && !!onStop
+
+  const handleSend = useCallback(() => {
+    if (!hasContent || disabled) return
+    const text = value
+    setValue('')
+    adjustHeight(true)
+    onSend(text)
+  }, [hasContent, disabled, value, onSend, adjustHeight])
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
     }
-
-    const toggleMode = (mode: 'modulos' | 'resumo') => {
-      setActiveMode((prev) => (prev === mode ? 'none' : mode))
-    }
-
-    const modePlaceholders = {
-      none: placeholder,
-      modulos: 'Filtre por módulo...',
-      resumo: 'Peça um resumo do conteúdo...',
-    }
-
-    return (
-      <TooltipProvider>
-        <div
-          ref={ref}
-          className={cn(
-            'w-full rounded-3xl border p-2',
-            'bg-[#12131a] border-gray-700/60',
-            'shadow-[0_8px_32px_rgba(0,0,0,0.5)]',
-            'transition-all duration-300',
-            !disabled && 'focus-within:border-link-yellow/50 focus-within:shadow-[0_8px_40px_rgba(245,196,0,0.08)]'
-          )}
-        >
-          {/* Textarea */}
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={disabled}
-            placeholder={modePlaceholders[activeMode]}
-            rows={1}
-            className={cn(
-              'w-full bg-transparent px-3 pt-2.5 pb-1 text-sm text-gray-100',
-              'placeholder:text-gray-600 focus:outline-none resize-none',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-              '[&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-700'
-            )}
-          />
-
-          {/* Bottom bar */}
-          <div className="flex items-center justify-between px-1 pt-1 pb-0.5">
-            {/* Left: mode toggles */}
-            <div className="flex items-center gap-0.5">
-
-              {/* Módulos */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => toggleMode('modulos')}
-                    disabled={disabled}
-                    className={cn(
-                      'flex items-center gap-1.5 h-8 px-2.5 rounded-full text-xs font-medium border transition-all duration-200',
-                      activeMode === 'modulos'
-                        ? 'bg-link-yellow/15 border-link-yellow text-link-yellow'
-                        : 'bg-transparent border-transparent text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'
-                    )}
-                  >
-                    <motion.div
-                      animate={{ rotate: activeMode === 'modulos' ? 360 : 0 }}
-                      transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-                    >
-                      <Layers className="w-3.5 h-3.5" />
-                    </motion.div>
-                    <AnimatePresence>
-                      {activeMode === 'modulos' && (
-                        <motion.span
-                          initial={{ width: 0, opacity: 0 }}
-                          animate={{ width: 'auto', opacity: 1 }}
-                          exit={{ width: 0, opacity: 0 }}
-                          transition={{ duration: 0.15 }}
-                          className="overflow-hidden whitespace-nowrap"
-                        >
-                          Módulos
-                        </motion.span>
-                      )}
-                    </AnimatePresence>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Filtrar por módulo</TooltipContent>
-              </Tooltip>
-
-              <Divider />
-
-              {/* Resumo */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => toggleMode('resumo')}
-                    disabled={disabled}
-                    className={cn(
-                      'flex items-center gap-1.5 h-8 px-2.5 rounded-full text-xs font-medium border transition-all duration-200',
-                      activeMode === 'resumo'
-                        ? 'bg-link-blue/20 border-blue-500 text-blue-400'
-                        : 'bg-transparent border-transparent text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'
-                    )}
-                  >
-                    <motion.div
-                      animate={{ rotate: activeMode === 'resumo' ? 360 : 0 }}
-                      transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-                    >
-                      <BookOpen className="w-3.5 h-3.5" />
-                    </motion.div>
-                    <AnimatePresence>
-                      {activeMode === 'resumo' && (
-                        <motion.span
-                          initial={{ width: 0, opacity: 0 }}
-                          animate={{ width: 'auto', opacity: 1 }}
-                          exit={{ width: 0, opacity: 0 }}
-                          transition={{ duration: 0.15 }}
-                          className="overflow-hidden whitespace-nowrap"
-                        >
-                          Resumo
-                        </motion.span>
-                      )}
-                    </AnimatePresence>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Pedir resumo do conteúdo</TooltipContent>
-              </Tooltip>
-
-              <Divider />
-
-              {/* Dica */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    disabled
-                    className="flex items-center gap-1.5 h-8 px-2.5 rounded-full text-xs border border-transparent text-gray-600 cursor-default"
-                  >
-                    <Lightbulb className="w-3.5 h-3.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Baseado nos materiais do MBA</TooltipContent>
-              </Tooltip>
-            </div>
-
-            {/* Right: send button */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <motion.button
-                  onClick={handleSubmit}
-                  disabled={(!hasContent && !disabled) || (disabled && !hasContent)}
-                  whileTap={{ scale: 0.88 }}
-                  className={cn(
-                    'h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0',
-                    'transition-all duration-200',
-                    hasContent && !disabled
-                      ? 'bg-link-yellow text-gray-950 shadow-[0_0_12px_rgba(245,196,0,0.35)] hover:brightness-110'
-                      : disabled
-                      ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                      : 'bg-gray-800 text-gray-600 cursor-not-allowed'
-                  )}
-                >
-                  <AnimatePresence mode="wait" initial={false}>
-                    {disabled ? (
-                      <motion.span
-                        key="stop"
-                        initial={{ scale: 0, rotate: -90 }}
-                        animate={{ scale: 1, rotate: 0 }}
-                        exit={{ scale: 0, rotate: 90 }}
-                        transition={{ duration: 0.15 }}
-                      >
-                        <Square className="h-3 w-3 fill-current" />
-                      </motion.span>
-                    ) : (
-                      <motion.span
-                        key="send"
-                        initial={{ scale: 0, rotate: -90 }}
-                        animate={{ scale: 1, rotate: 0 }}
-                        exit={{ scale: 0, rotate: 90 }}
-                        transition={{ duration: 0.15 }}
-                      >
-                        <ArrowUp className="h-4 w-4" />
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                </motion.button>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                {disabled ? 'Gerando...' : hasContent ? 'Enviar (Enter)' : 'Digite algo'}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
-      </TooltipProvider>
-    )
   }
-)
-MBAPromptBox.displayName = 'MBAPromptBox'
+
+  return (
+    <div
+      className={cn(
+        'relative rounded-2xl border transition-all duration-200',
+        'bg-gray-900/80 backdrop-blur-xl',
+        'border-gray-700/60 shadow-[0_4px_24px_rgba(0,0,0,0.5)]',
+        'focus-within:border-link-yellow/30 focus-within:shadow-[0_0_20px_rgba(245,196,0,0.06),0_4px_24px_rgba(0,0,0,0.5)]'
+      )}
+    >
+      <Textarea
+        ref={textareaRef}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value)
+          adjustHeight()
+        }}
+        onKeyDown={handleKeyDown}
+        placeholder="Pergunte sobre frameworks, cases ou conceitos do MBA..."
+        disabled={isStreaming}
+        className={cn(
+          'w-full px-4 py-4 resize-none border-none min-h-[52px]',
+          'bg-transparent text-white text-sm leading-relaxed',
+          'focus-visible:ring-0 focus-visible:ring-offset-0',
+          'placeholder:text-neutral-600'
+        )}
+        style={{ overflow: 'hidden' }}
+      />
+
+      {/* Footer bar */}
+      <div className="flex items-center justify-between px-3.5 pb-3.5">
+        <span className="text-[11px] text-neutral-700 hidden sm:block select-none">
+          Enter para enviar · Shift+Enter nova linha
+        </span>
+
+        {isStreaming ? (
+          // Stop button — visible during active streaming
+          <Button
+            onClick={onStop}
+            className={cn(
+              'ml-auto h-8 w-8 rounded-full p-0 transition-all duration-200',
+              'bg-white/10 text-white hover:bg-red-500/80 hover:text-white',
+              'shadow-[0_0_10px_rgba(255,255,255,0.08)]'
+            )}
+            aria-label="Parar geração"
+          >
+            <Square className="w-3.5 h-3.5" />
+          </Button>
+        ) : (
+          // Send button — visible when not streaming
+          <Button
+            onClick={handleSend}
+            disabled={!hasContent || !!disabled}
+            className={cn(
+              'ml-auto h-8 w-8 rounded-full p-0 transition-all duration-200',
+              hasContent && !disabled
+                ? 'bg-link-yellow text-gray-950 hover:brightness-110 shadow-[0_0_14px_rgba(245,196,0,0.45)]'
+                : 'bg-white/5 text-white/20 cursor-not-allowed'
+            )}
+            aria-label="Enviar mensagem"
+          >
+            <ArrowUp className="w-4 h-4" />
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
