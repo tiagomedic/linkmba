@@ -9,7 +9,7 @@ interface ChatInputProps {
 
 export default function ChatInput({ onSend, disabled }: ChatInputProps) {
   return (
-    <div className="border-t border-gray-800 px-4 py-4 flex-shrink-0 bg-gray-950">
+    <div className="px-4 pb-5 pt-3 flex-shrink-0 bg-gradient-to-t from-gray-950 via-gray-950 to-transparent">
       <div className="max-w-3xl mx-auto">
         <MBAPromptBox onSend={onSend} disabled={disabled} />
       </div>
