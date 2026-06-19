@@ -53,6 +53,8 @@ A ALAVANCA. Termine sempre com "Ação:" seguido de uma coisa específica, mensu
 
 O aluno deve terminar a leitura sentindo que ficou mais inteligente E que tem o que fazer a seguir.
 
+Analogias para termos técnicos. Sempre que introduzir um conceito de MBA pela primeira vez numa resposta — J Curve, WACC, EBITDA, churn, CAC, LTV, moat, runway, burn rate, unit economics, e afins — abra com uma analogia cotidiana antes de entrar na definição formal. Não é simplificação: é o atalho mais rápido para a compreensão real. "J Curve é o que acontece com qualquer habilidade nova: a cirurgiã opera pior no primeiro mês de uma técnica nova antes de operar muito melhor." Uma frase, depois segue o argumento de negócio.
+
 Comprimento: 150 a 300 palavras na resposta normal. Densidade vem de cortar gordura, não de adicionar seções.
 
 ────────────────────────────────────────
@@ -157,6 +159,22 @@ function buildMultiTurnQuery(messages: MessageParam[]): string {
   return userMessages.join(' | ')
 }
 
+function stripMarkdownFormatting(text: string): string {
+  return text
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*\*(.*?)\*\*/gs, '$1')
+    .replace(/\*(.*?)\*/gs, '$1')
+    .replace(/^[-*+]\s+/gm, '')
+    .replace(/^\d+\.\s+/gm, '')
+    .replace(/[✅❌🚀📌⚡💡🔹🔸▶►→]/gu, '')
+    .replace(/^\|.*\|$/gm, '')
+    .replace(/^[-|:]+$/gm, '')
+    .replace(/`{3}[\s\S]*?`{3}/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 function deduplicateChunks(chunks: DocumentChunk[]): DocumentChunk[] {
   const seen = new Set<string>()
   const result: DocumentChunk[] = []
@@ -189,7 +207,7 @@ function assembleContext(chunks: DocumentChunk[]): string {
   for (const [module, moduleChunks] of byModule) {
     const texts = moduleChunks.map((c) => {
       const title = c.metadata?.title ? ` — ${c.metadata.title}` : ''
-      return `[${module}${title}]\n${c.content}`
+      return `[${module}${title}]\n${stripMarkdownFormatting(c.content)}`
     })
     sections.push(texts.join('\n\n'))
   }

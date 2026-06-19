@@ -205,7 +205,7 @@ export function MBALandingChat({
 
           {/* Index badge */}
           <p className="mt-3 text-neutral-600 text-xs tracking-wide">
-            82 materiais · 2.878 trechos indexados
+            125 materiais · 3.075 trechos indexados
           </p>
         </div>
       </div>
