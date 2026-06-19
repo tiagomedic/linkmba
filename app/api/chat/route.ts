@@ -286,9 +286,6 @@ export async function POST(request: Request): Promise<Response> {
   const readable = new ReadableStream({
     async start(controller) {
       try {
-        // anthropic.messages.stream() returns a MessageStream synchronously — no await.
-        // Using 'claude-haiku-4-5' (the correct alias; 'claude-haiku-4-5-20251001' does
-        // not exist in the Anthropic API and would return a 4xx on every request).
         const stream = anthropic.messages.stream({
           model: 'claude-sonnet-4-6',
           max_tokens: 1500,
